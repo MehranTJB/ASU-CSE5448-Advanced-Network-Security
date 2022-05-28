@@ -265,7 +265,7 @@ $IPTABLES -P FORWARD DROP
 # Mehran: Allows return packets from established connections to client
 $IPTABLES -A FORWARD -p ICMP -m state --state NEW,RELATED,ESTABLISHED -j ACCEPT
 
-# Logging
+# Mehran: Logging
 $IPTABLES -A FORWARD -j LOG --log-prefix SKIPPED-FORWARD-
 
 # example of using allowed
@@ -347,7 +347,7 @@ $IPTABLES -A OUTPUT -j LOG --log-prefix DROPPED-EGRESS-
 
 #$IPTABLES -t nat -A POSTROUTING -o $Internet_IFACE -j MASQUERADE
 
-# Allows client to ping some DNS servers
+# Mehran: Allows client to ping some DNS servers
 $IPTABLES -t nat -A POSTROUTING -p icmp -o $Internet_IFACE -d $DNS1 -j MASQUERADE
 
 # Logging
