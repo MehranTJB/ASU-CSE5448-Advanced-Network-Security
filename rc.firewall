@@ -5,7 +5,7 @@
 # rc.firewall - Initial SIMPLE IP Firewall script for Linux and iptables        #
 #   										#
 # 02/17/2020  Created by Dijiang Huang ASU SNAC Lab    		    		#
-# Last updated 05/27/2022 - Mehran Tajbakhsh		  				#
+# Last updated 05/38/2021 - Mehran Tajbakhsh		  				#
 #################################################################################
 #                                                                               #
 #                                                                               #
@@ -37,8 +37,6 @@
 #
 #
 
-# Used for debug
-# set -x
 
 ####
 # 1.1. Internet ip address
@@ -66,7 +64,7 @@ Client_NET_IFACE="ens33"
 #
 # IP aliases for the server (server's IP address)
 #
-LO_IFACE="localhost"
+LO_IFACE="lo"
 LO_IP="127.0.0.1"
 WEB_IP_ADDRESS="127.0.0.1"
 #IP aliases for NATed services (this is the GW's ip on client network)
@@ -264,24 +262,10 @@ $IPTABLES -P FORWARD DROP
 # example of checking bad tcp packets
 #$IPTABLES -A FORWARD -p tcp -j bad_tcp_packets
 
-# Mehran: Allow http traffic from client network to server network - For Test
-#$IPTABLES -A FORWARD -i $Client_NET_IFACE -o $Internet_IFACE -j ACCEPT
+# Mehran: Allows return packets from established connections to client
+$IPTABLES -A FORWARD -p ICMP -m state --state NEW,RELATED,ESTABLISHED -j ACCEPT
 
-# Mehran: Allow internet traffic to HTTP/HTTPS for the client - For Test
-#$IPTABLES -A FORWARD -p TCP  -i $Client_NET_IFACE -o $Internet_IFACE ! -d $Client_NET_IP --dport 80  -j ACCEPT
-#$IPTABLES -A FORWARD -p TCP  -i $Client_NET_IFACE -o $Internet_IFACE --dport 443 -j ACCEPT
-
-# Mehran: Allows ping the DNS server
-$IPTABLES -A FORWARD -p ICMP -i $Client_NET_IFACE -o $Internet_IFACE -d $DNS1 -j ACCEPT
-
-# Mehran: Allows DNS resolution - For Test
-#$IPTABLES -A FORWARD -p UDP  -i $Client_NET_IFACE -o $Internet_IFACE --dport 53 -d $DNS1 -j ACCEPT
-#$IPTABLES -A FORWARD -p UDP  -i $Client_NET_IFACE -o $Internet_IFACE --sport 53 -s $DNS1 -j ACCEPT
-
-# Mehran: Allows return packets from established connections
-$IPTABLES -A FORWARD -o $Client_NET_IFACE -i $Internet_IFACE -m state --state RELATED,ESTABLISHED -j ACCEPT
-
-# Mehran: Logging
+# Logging
 $IPTABLES -A FORWARD -j LOG --log-prefix SKIPPED-FORWARD-
 
 # example of using allowed
@@ -294,40 +278,17 @@ $IPTABLES -A FORWARD -j LOG --log-prefix SKIPPED-FORWARD-
 
 #
 # Provide your input rules below to allow web traffic from client
+#
+# Mehran: Allows client to connect to the local web server on the Gateway 
+# Local webserver only listen to localhost - port 80 
+$IPTABLES -A INPUT -p TCP --dport 80 -i $LO_IFACE -s $Client_NET_IP -j ACCEPT
+$IPTABLES -A INPUT -p TCP -m state  --state  NEW,ESTABLISHED,RELATED -s $Client_NET_IP -j ACCEPT
 
-# Mehran: Allows loopback traffic resolution - For Test
-#$IPTABLES -A INPUT -i lo -j ACCEPT
-#$IPTABLES -A INPUT -i lo -s 127.0.0.0/8 -j ACCEPT
-#$IPTABLES -A INPUT ! -i lo -s 127.0.0.0/8 -j REJECT
+# Mehran: Generally allows ping to the Gateway from the client, and from the gateway towards the internet
+$IPTABLES -A INPUT -p ICMP --icmp-type echo-request -d $DNS1 -s $Client_NET_IP -j ACCEPT
+$IPTABLES -A INPUT -p ICMP --icmp-type echo-reply -s $DNS1 -d $Client_NET_IP -j ACCEPT
 
-# Mehran: Allows SYN and return packets from established connections
-$IPTABLES -A INPUT -p TCP --syn -j ACCEPT
-$IPTABLES -A INPUT -p TCP -m state --state ESTABLISHED,RELATED -j ACCEPT
-
-# Mehran: Allows loopback and client host to connect to the local web server on the Gateway
-$IPTABLES -A INPUT -p TCP  --dport 80  -i $LO_IFACE         -d $WEB_IP_ADDRESS -j ACCEPT
-$IPTABLES -A INPUT -p TCP  --dport 80  -i $Client_NET_IFACE -d $Client_NET_IP -j ACCEPT
-
-# Mehran: Allow traffic to HTTP/HTTPS for the Gateway - For Test
-#$IPTABLES -A INPUT -p TCP  -i $Internet_IFACE --sport 80  -j ACCEPT
-#$IPTABLES -A INPUT -p TCP  -i $Internet_IFACE --sport 443 -j ACCEPT
-
-# Mehran: Allows ping to the DNS server - For Test
-#$IPTABLES -A INPUT -p ICMP -i $Internet_IFACE -s $DNS1 -j ACCEPT
-
-# Mehran: Allows the ping traffic to the Gateway from the client, and from the gateway towards the internet
-$IPTABLES -A INPUT -p ICMP --icmp-type echo-request -i $Client_NET_IFACE -d $Client_NET_IP  -j ACCEPT
-$IPTABLES -A INPUT -p ICMP --icmp-type echo-request -i $LO_IFACE         -d $WEB_IP_ADDRESS -j ACCEPT
-
-# Mehran: Allows loopback ping - For Test
-#$IPTABLES -A INPUT -p ICMP --icmp-type echo-request -i $LO_IFACE         -d $LO_IP -j ACCEPT
-#$IPTABLES -A INPUT -p ICMP --icmp-type echo-reply   -i $LO_IFACE         -d $LO_IP -j ACCEPT
-
-# Mehran: Allows DNS traffic - For Test
-#$IPTABLES -A INPUT -p UDP  -i $Internet_IFACE --sport 53 -s $DNS1 -j ACCEPT
-#$IPTABLES -A INPUT -p UDP  --dport 53 -d $DNS1 -j ACCEPT
-
-# Mehran: Logging
+#Mehran: Logging
 $IPTABLES -A INPUT -j LOG --log-prefix DROPPED-INGRESS-
 
 #####
@@ -337,29 +298,14 @@ $IPTABLES -A INPUT -j LOG --log-prefix DROPPED-INGRESS-
 #
 # Provide your output rules below to allow web traffic (port 80) go back to client
 #
-# Mehran: loopback on output chain - For Test
-#$IPTABLES -A OUTPUT -o $LO_IFACE -j ACCEPT
-#$IPTABLES -A OUTPUT -o $LO_IFACE -s 127.0.0.0/8 -j ACCEPT
 
-# Mehran: Allows SYN and return packets from established connections
-$IPTABLES -A OUTPUT -p TCP  -m state --state ESTABLISHED,RELATED    -j ACCEPT
-
-# Mehran: Allows DNS traffic - For Test
-#$IPTABLES -A OUTPUT -p UDP  --sport 53 -d 127.0.0.53        		-j ACCEPT
-#$IPTABLES -A OUTPUT -p UDP  --sport 53 -d $DNS1    					-j ACCEPT
-#$IPTABLES -A OUTPUT -p UDP  --dport 53 -d $DNS1    					-j ACCEPT
-
-# Mehran: Allows client reach to webserver on the gateway
-$IPTABLES -A OUTPUT -p TCP  --sport 80 -o $Client_NET_IFACE -j ACCEPT
-$IPTABLES -A OUTPUT -p TCP  --sport 80 -o $LO_IFACE         -j ACCEPT
+# Mehran: Allows return packets from established connections
+$IPTABLES -A OUTPUT -p TCP --sport 80 -d $Client_NET_IP -j ACCEPT
+$IPTABLES -A OUTPUT -p TCP -m state  --state ESTABLISHED,RELATED -s $Client_NET_IP -d $Client_NET_IP -j ACCEPT
 
 # Mehran: Allows ping, both outgoing and incoming, on the gateway
-$IPTABLES -A OUTPUT -p ICMP --icmp-type echo-reply -j ACCEPT
-$IPTABLES -A OUTPUT -p ICMP --icmp-type echo-request -j ACCEPT
-
-# Mehran: Allow traffic to HTTP/HTTPS for the Gateway - For Test
-#$IPTABLES -A OUTPUT -p TCP  --dport 80  -o $Internet_IFACE  -j ACCEPT
-#$IPTABLES -A OUTPUT -p TCP  --dport 443 -o $Internet_IFACE  -j ACCEPT
+$IPTABLES -A OUTPUT -p ICMP --icmp-type echo-reply -s $DNS1 -d $Client_NET_IP -j ACCEPT
+$IPTABLES -A OUTPUT -p ICMP --icmp-type echo-request -s $Client_NET_IP -d $DNS1 -j ACCEPT
 
 # Mehran: Logging
 $IPTABLES -A OUTPUT -j LOG --log-prefix DROPPED-EGRESS-
@@ -401,16 +347,9 @@ $IPTABLES -A OUTPUT -j LOG --log-prefix DROPPED-EGRESS-
 
 #$IPTABLES -t nat -A POSTROUTING -o $Internet_IFACE -j MASQUERADE
 
-# Mehran: Allows client to ping the DNS server
+# Allows client to ping some DNS servers
 $IPTABLES -t nat -A POSTROUTING -p icmp -o $Internet_IFACE -d $DNS1 -j MASQUERADE
 
-# Mehran: Allows client DNS resolution
-$IPTABLES -t nat -A POSTROUTING -p udp -o $Internet_IFACE -d $DNS1 -j MASQUERADE
-
-# Mehran: Allow internet traffic to HTTP/HTTPS for the client - For Test
-#$IPTABLES -t nat -A POSTROUTING -p tcp -o $Internet_IFACE --dport 80 -j MASQUERADE
-#$IPTABLES -t nat -A POSTROUTING -p tcp -o $Internet_IFACE --dport 443 -j MASQUERADE
-
-# Mehran: Logging
+# Logging
 $IPTABLES -t nat -A POSTROUTING -j LOG --log-prefix NO-MASQUERADE-MATCH-
 
