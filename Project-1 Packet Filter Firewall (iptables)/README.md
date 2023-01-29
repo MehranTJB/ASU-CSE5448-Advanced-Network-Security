@@ -1,4 +1,4 @@
-## PAcket Filter Firewall (iptables)
+## Packet Filter Firewall (iptables)
 
 In this lab, I used the [netplan](https://netplan.io) tool to configure network settings in virtual machines and I used the [iptables](https://help.ubuntu.com/community/IptablesHowTo) tool on Linux systems (Ubuntu) to implement a packet filter firewall.
 
